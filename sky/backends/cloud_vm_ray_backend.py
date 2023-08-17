@@ -2583,11 +2583,13 @@ class CloudVmRayBackend(backends.Backend['CloudVmRayResourceHandle']):
             attempt_cnt = 1
 
             #hacky shit
-            custom_resources = [resources_lib.Resources(cloud=sky.clouds.Lambda(), accelerators="A10:1", region='us-east-1', instance_type='gpu_1x_a10') ,resources_lib.Resources(cloud=sky.clouds.Lambda(), accelerators="A6000:1", region='us-east-1', instance_type='gpu_1x_a6000'), resources_lib.Resources(cloud=sky.clouds.Lambda(), accelerators="A100:1", region='us-east-1', instance_type='gpu_1x_a100')]
-
-            custom_resources = [to_provision]
+            if hasattr(task, "custom_resources") and task.custom_resources:
+                custom_resources = task.custom_resources
+            # custom_resources = [resources_lib.Resources(cloud=sky.clouds.GCP(), accelerators={"L4":1}, instance_type='g2-standard-4', region='us-east4'), resources_lib.Resources(cloud=sky.clouds.Lambda(), accelerators="A10:1", region='us-east-1', instance_type='gpu_1x_a10'), resources_lib.Resources(cloud=sky.clouds.Lambda(), accelerators="A6000:1", region='us-east-1', instance_type='gpu_1x_a6000'), resources_lib.Resources(cloud=sky.clouds.Lambda(), accelerators="A100:1", region='us-east-1', instance_type='gpu_1x_a100')]
+            else:
+                custom_resources = [to_provision]
             resource_cycle = cycle(custom_resources)
-
+            print("using custom resources", custom_resources)
             while True:
                 # For on-demand instances, RetryingVmProvisioner will retry
                 # within the given region first, then optionally retry on all
