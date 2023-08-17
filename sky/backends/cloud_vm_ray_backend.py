@@ -1,4 +1,5 @@
 """Backend: runs on cloud virtual machines, managed by Ray."""
+from itertools import cycle
 import ast
 import copy
 import enum
@@ -2580,6 +2581,13 @@ class CloudVmRayBackend(backends.Backend['CloudVmRayResourceHandle']):
                 local_wheel_path, wheel_hash = wheel_utils.build_sky_wheel()
             backoff = common_utils.Backoff(_RETRY_UNTIL_UP_INIT_GAP_SECONDS)
             attempt_cnt = 1
+
+            #hacky shit
+            custom_resources = [resources_lib.Resources(cloud=sky.clouds.Lambda(), accelerators="A10:1", region='us-east-1', instance_type='gpu_1x_a10') ,resources_lib.Resources(cloud=sky.clouds.Lambda(), accelerators="A6000:1", region='us-east-1', instance_type='gpu_1x_a6000'), resources_lib.Resources(cloud=sky.clouds.Lambda(), accelerators="A100:1", region='us-east-1', instance_type='gpu_1x_a100')]
+
+            custom_resources = [to_provision]
+            resource_cycle = cycle(custom_resources)
+
             while True:
                 # For on-demand instances, RetryingVmProvisioner will retry
                 # within the given region first, then optionally retry on all
@@ -2596,6 +2604,33 @@ class CloudVmRayBackend(backends.Backend['CloudVmRayResourceHandle']):
                 # in if retry_until_up is set, which will kick off new "rounds"
                 # of optimization infinitely.
                 try:
+                    #######hacky shit
+                    current_resource = next(resource_cycle)
+                    print("curent resource: ", current_resource)
+                    to_provision = current_resource
+                    task.best_resource = current_resource
+                    task.resources = {current_resource}
+                    print("taskbest", task.best_resource)
+                    # self._dag.task.best_resource = current_resource
+                    # self._dag.task.resources = {current_resource}
+    
+                    to_provision_config = RetryingVmProvisioner.ToProvisionConfig(
+                        cluster_name,
+                        to_provision,
+                        task.num_nodes,
+                        prev_cluster_status=None)
+                    # Try to launch the exiting cluster first
+                    to_provision_config = self._check_existing_cluster(
+                    task, to_provision, cluster_name, dryrun)
+                    assert to_provision_config.resources is not None, (
+                        'to_provision should not be None', to_provision_config)
+
+                    prev_cluster_status = to_provision_config.prev_cluster_status
+                    usage_lib.messages.usage.update_cluster_resources(
+                    to_provision_config.num_nodes, to_provision_config.resources)
+                    usage_lib.messages.usage.update_cluster_status(prev_cluster_status)
+
+                    #######end hacky shit
                     provisioner = RetryingVmProvisioner(
                         self.log_dir,
                         self._dag,
